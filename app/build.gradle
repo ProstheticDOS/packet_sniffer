@@ -1,0 +1,18 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'com.example.packetsniffer'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.example.packetsniffer"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+    buildTypes {
+        debug { }
+        release { minifyEnabled false }
+    }
+}

@@ -1,0 +1,2 @@
+rootProject.name = "packet_sniffer"
+include ':app'

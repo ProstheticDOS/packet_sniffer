@@ -1,0 +1,11 @@
+[package]
+name = "packet_sniffer"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "packet_sniffer"
+crate-type = ["cdylib"]
+
+[dependencies]
+jni = "0.21"
