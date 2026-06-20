@@ -40,3 +40,6 @@ local.properties
 *.iml
 .DS_Store
 Thumbs.db
+
+## Test files
+apk.txt

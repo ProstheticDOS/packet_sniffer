@@ -15,7 +15,8 @@ RUN dnf -y makecache && \
         clang \
         gcc \
         sudo \
-        java-latest-openjdk-devel && \
+        java-latest-openjdk-devel \
+        fzf && \
     dnf clean all && \
     rm -rf /var/cache/dnf
 
