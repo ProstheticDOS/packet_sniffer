@@ -2,9 +2,8 @@ package com.example.packetsniffer;
 
 import android.net.VpnService;
 import android.os.ParcelFileDescriptor;
-
+import android.content.pm.PackageManager;
 import java.lang.annotation.Native;
-
 import android.content.Intent;
 import android.os.IBinder;
 
@@ -16,10 +15,21 @@ public class SnifferVpnService extends VpnService {
   public int onStartCommand(Intent intent, int flags, int startId) {
     Builder builder = new Builder();
     builder.setSession("packet_sniffer")
-        .addAddress("10.0.0.2", 32) // Assign IP to VPN interface
-        .addRoute("0.0.0.0", 0) // Route ALL traffic through VPN
+        .addAddress("10.0.0.2", 32) // Assign IP to VPN interface— doesn't interfere with the existence of the real
+                                    // correspondinh IP since this functions creates a *virtual* IP that exists only
+                                    // inside the VPN.
+        .addRoute("0.0.0.0", 0) // Routes ALL traffic through VPN (default behaviour, use addAllowedApplication)
         .addDnsServer("8.8.8.8") // Use Google DNS
         .setMtu(1500); // Standard Ethernet MTU
+
+    // addAllowedApplication
+    try {
+      builder.addAllowedApplication("com.tachibana.downloader"); // this is my test app
+    } catch (PackageManager.NameNotFoundException e) {
+      // This triggers if "com.tachibana.downloader" is NOT installed on the device.
+      e.printStackTrace(); // We crash to prevent app from... well taking the device offline by routing all
+                           // traffic inro the void (this VPN)
+    }
 
     vpnInterface = builder.establish();
     if (vpnInterface == null) {
