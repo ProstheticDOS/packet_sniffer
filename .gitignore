@@ -27,6 +27,7 @@ local.properties
 *.keystore
 *.apk
 *.aab
+*.so
 
 # Block Gradle internal cache and wrappers
 .gradle/
