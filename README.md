@@ -41,6 +41,11 @@ graph TD
 - Does not inspect DNS-over-TLS (DoT).
 - Packets are inspected but not forwarded back to the network stack, so network traffic is effectively dropped after capture.
 - Error handling is minimal and intended primarily for debugging.
+- Lots of dead code for debugging purposes (manual debugging)
+- No automated test suite used 
+- Limited testing coverage
+- Manual testing only
+
 ## Roadmap
 - [x] Packet Parsing
 - [x] Unencrypted DNS parsing
@@ -52,4 +57,4 @@ graph TD
 
 ---
 ### Development notes
-This project was developed entirely on an Android device using Neovim and a mobile Rust/Java toolchain.
+This project was developed entirely on an Android device using Neovim and a mobile Rust/Java toolchain. Testing was hard.
