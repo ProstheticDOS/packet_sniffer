@@ -9,5 +9,10 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = "1.0.102"
+domain = "0.12.1"
 etherparse = "0.20.2"
+extsort = "0.5.0"
+fst = "0.4.7"
 jni = "0.21"
+memmap2 = "0.9.10"
+memmap3 = "0.1.0"
