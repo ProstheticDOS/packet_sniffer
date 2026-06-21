@@ -1,5 +1,6 @@
 ## About
-This project explores how Android VPN-based packet capture works. It creates a userspace VPN using Android's VpnService API, captures packets through a TUN interface, parses unencrypted DNS traffic (UDP/53), and compares queried domains against a user-provided blocklist.
+**[Click here](https://github.com/ProstheticDOS/packet_sniffer) to view the current version (highly recommended)**
+This project explores how Android VPN-based packet capture works. It creates a userspace VPN using Android's [VpnService](https://developer.android.com/reference/android/net/VpnService) API, captures packets through a [TUN](https://www.baeldung.com/linux/tun-interface-purpose) interface, parses unencrypted DNS traffic (UDP/53), and compares queried domains against a user-provided list.
 
 ## Technical Details
 
@@ -50,10 +51,10 @@ graph TD
 - [x] Packet Parsing
 - [x] Unencrypted DNS parsing
 - [ ] Code Readability
-- [ ] Fowarding packets to the internet
+- [ ] Forwarding packets to the internet
 
 ## Things I'd want to add if possible
-- [ ] FSTs (finite state trancuders) for more efficient parsing of list.txt 
+- [ ] FSTs (finite state tranducers) for more efficient parsing of list.txt 
 
 ---
 ### Development notes
