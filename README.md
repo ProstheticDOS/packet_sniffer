@@ -31,7 +31,7 @@ graph TD
 ```
 
 ## Screenshots
-![[Screenshot.png]]
+![Screenshot](https://raw.githubusercontent.com/ProstheticDOS/packet_sniffer/refs/heads/master/Screenshot.png)
 
 ## Limitations
 
