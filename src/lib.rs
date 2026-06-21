@@ -10,6 +10,8 @@ use std::io::Read;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::os::fd::FromRawFd;
 use std::os::fd::IntoRawFd;
+use std::thread::sleep;
+use std::time::Duration;
 use std::{usize, vec};
 
 #[unsafe(no_mangle)]
@@ -45,9 +47,12 @@ pub extern "system" fn Java_com_example_packetsniffer_NativeBridge_runPacketLoop
                 )
                 .to_string();
                 print_on_screen(&message, &mut env);
+
+                sleep(Duration::from_secs(2));
             }
             Err(error) => {
                 let message = format!("Error: {:?}, trying again in 2 seconds", error);
+                sleep(Duration::from_secs(2));
             }
         };
     }
