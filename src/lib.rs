@@ -1,5 +1,6 @@
-use anyhow::Ok;
+use crate::common_structs::{ParsedDataPacket, TransportLayerProtocol};
 use domain::base::Message;
+use domain::dep::octseq::OctetsInto;
 use etherparse::{NetHeaders, PacketHeaders, TransportHeader};
 use jni::JNIEnv;
 use jni::objects::{JClass, JValue};
@@ -7,11 +8,14 @@ use jni::sys::jint;
 use memmap2::Mmap;
 use std::fs::File;
 use std::io::Read;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::os::fd::FromRawFd;
 use std::thread::sleep;
 use std::time::Duration;
 use std::vec;
+
+pub mod parser;
+pub mod transport;
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_example_packetsniffer_NativeBridge_runPacketLoop(
@@ -22,97 +26,84 @@ pub extern "system" fn Java_com_example_packetsniffer_NativeBridge_runPacketLoop
     // Reading from vpn_file_descriptor advances the pointer, hence we need to make it mutable
     let mut vpn_file_descriptor = unsafe { File::from_raw_fd(file_descriptor) };
 
-    let file_descriptor_string = file_descriptor.to_string();
-    print_on_screen(&file_descriptor_string, &mut env);
-
-    let mut buffer = vec![0u8; 1500];
-    let mut number_of_bytes: usize = 0;
-
     loop {
-        match vpn_file_descriptor.read(&mut buffer) {
-            Result::Ok(bytes) => {
-                number_of_bytes = bytes;
-            }
-            Result::Err(error) => continue,
-        }
-
-        let data_packet = parse_packet(number_of_bytes, &buffer);
-
-        // print packet headers
-        let packet_payload = &buffer[..number_of_bytes];
-
-        match data_packet {
-            Result::Ok(packet_info) => {
-                if packet_info.protocol == TransportLayerProtocol::UDP
-                    && packet_info.destination_port == "53".to_string()
-                {
-                    let udp_payload = packet_info.payload;
-                    let domain_name = get_domain_name(&udp_payload);
-
-                    if domain_name.kind == DomainNameOrError::Name {
-                        print_on_screen(&domain_name.name, &mut env);
-                        let comparasion_against_list =
-                            check_domain_name_against_list(domain_name.name);
-                        match comparasion_against_list {
-                            Result::Ok(answer) => {
-                                if answer == YesOrNo::Yes {
-                                    let message = "This domain is in the list!".to_string();
-                                    print_on_screen(&message, &mut env);
-                                }
-                            }
-
-                            Result::Err(error) => {
-                                if error.kind() != std::io::ErrorKind::NotFound {
-                                    ();
-                                } else {
-                                    let message = error.to_string();
-                                    print_on_screen(&message, &mut env);
-                                };
-                            }
-                        }
-                    }
-                };
-            }
-
-            Result::Err(error) => (),
-        }
-
-        let domain_name = get_domain_name(packet_payload);
-        #[cfg(debug_assertions)]
-        print_debug_info(&buffer, &mut env, number_of_bytes);
+        main(&mut vpn_file_descriptor, &mut env);
+        // moving the logic into main this way provides
+        // better ergonomics
     }
 }
 
-#[derive(PartialEq)]
-enum TransportLayerProtocol {
-    UDP,
-    TCP,
-    Unknown, //initial unassigned value
+fn main(vpn_file_descriptor: &mut File, env: &mut JNIEnv) {
+    // some random value to initialize with
+    let mut buffer: Vec<u8> = vec![0u8; 1500];
+    let mut number_of_bytes: usize = 0;
+
+    match vpn_file_descriptor.read(&mut buffer) {
+        Result::Ok(bytes) => {
+            number_of_bytes = bytes;
+        }
+        Result::Err(error) => return,
+    }
+
+    let data_packet = parser::parse_packet(number_of_bytes, &buffer);
+
+    // print packet headers
+    let mut packet_payload = &buffer[..number_of_bytes];
+
+    let data_packet = match &data_packet {
+        Result::Ok(value) => value,
+        Result::Err(error) => {
+            print_on_screen(error.to_string(), env);
+            return;
+        }
+    };
+
+    // main printing domain loop
+    if data_packet.protocol == parser::TransportLayerProtocol::UDP
+        && data_packet.destination_port == "53".to_string()
+    {
+        let udp_payload = &data_packet.payload;
+        let domain_name = get_domain_name(udp_payload);
+
+        if domain_name.kind == DomainNameOrError::Name {
+            print_on_screen(domain_name.name.clone(), env);
+            let comparasion_against_list = check_domain_name_against_list(domain_name.name);
+            match comparasion_against_list {
+                Result::Ok(answer) => {
+                    if answer == YesOrNo::Yes {
+                        let message = "This domain is in the list!".to_string();
+                        print_on_screen(message, env);
+                    }
+                }
+
+                Result::Err(error) => {
+                    if error.kind() != std::io::ErrorKind::NotFound {
+                        ();
+                    } else {
+                        let message = error.to_string();
+                        print_on_screen(message, env);
+                    };
+                }
+            }
+        }
+    };
+
+    #[cfg(debug_assertions)]
+    print_debug_info(&buffer, env, number_of_bytes);
 }
 
 #[derive(PartialEq)]
-enum DomainNameOrError {
+pub enum DomainNameOrError {
     Name,
     Error,
 }
 
-struct ParsedDataPacket {
-    net_headers: Option<NetHeaders>,
-    transport_headers: Option<TransportHeader>,
-    protocol: TransportLayerProtocol,
-    destination_ip_address: String,
-    source_ip_address: String,
-    source_port: String,
-    destination_port: String,
-    payload: Vec<u8>,
-}
-
-struct DomainName {
+pub struct DomainName {
     name: String,
     kind: DomainNameOrError,
 }
 
-fn print_on_screen(message: &String, env: &mut JNIEnv) {
+fn print_on_screen(message: String, env: &mut JNIEnv) {
     let message = env.new_string(message).unwrap();
     env.call_static_method(
         "com/example/packetsniffer/NativeBridge",
@@ -137,77 +128,21 @@ fn print_raw_packets(env: &mut JNIEnv, mut vpn_file_descriptor: &File) {
                     break;
                 }
                 let message = bytes.to_string();
-                print_on_screen(&message, env);
+                print_on_screen(message, env);
             }
 
             Err(error) => {
                 let error_message: String = format!("Unable to read packet: {}", error);
 
-                print_on_screen(&error_message, env);
+                print_on_screen(error_message, env);
                 continue;
             }
         }
     }
 }
 
-fn parse_packet(number_of_bytes: usize, payload: &[u8]) -> Result<ParsedDataPacket, anyhow::Error> {
-    let parsed = PacketHeaders::from_ip_slice(&payload[..number_of_bytes])?;
-
-    let net_headers = parsed.net;
-    let mut source_ip = String::new();
-    let mut destination_ip = String::new();
-    let mut protocol = TransportLayerProtocol::Unknown;
-    let transport_header = parsed.transport;
-    let mut source_port = String::new();
-    let mut destination_port = String::new();
-
-    // gets us port and protocol information
-    match transport_header {
-        Some(etherparse::TransportHeader::Udp(ref udp)) => {
-            protocol = TransportLayerProtocol::UDP;
-            source_port = udp.source_port.to_string();
-            destination_port = udp.destination_port.to_string();
-        }
-        Some(etherparse::TransportHeader::Tcp(ref tcp)) => {
-            protocol = TransportLayerProtocol::TCP;
-            source_port = tcp.source_port.to_string();
-            destination_port = tcp.destination_port.to_string();
-        }
-        _ => (), // Don't want to deal with ICMP, not that important anyway (says an amateur)
-    }
-
-    match net_headers {
-        Some(etherparse::NetHeaders::Ipv4(ref header, _)) => {
-            source_ip = Ipv4Addr::from(header.source).to_string();
-            destination_ip = Ipv4Addr::from(header.destination).to_string();
-        }
-
-        Some(etherparse::NetHeaders::Ipv6(ref header, _)) => {
-            source_ip = Ipv6Addr::from(header.source).to_string();
-            destination_ip = Ipv6Addr::from(header.destination).to_string();
-        }
-
-        _ => (),
-    }
-
-    let parsed_data_packet = ParsedDataPacket {
-        source_port: source_port,
-        destination_port: destination_port,
-        protocol: protocol,
-        transport_headers: transport_header,
-        net_headers: net_headers,
-        source_ip_address: source_ip,
-        destination_ip_address: destination_ip,
-        payload: parsed.payload.slice().to_vec(), // payload slice
-    };
-
-    let packet = etherparse::IpSlice::from_slice(payload);
-
-    Ok(parsed_data_packet)
-}
-
 fn print_debug_info(buffer: &Vec<u8>, env: &mut JNIEnv, number_of_bytes: usize) {
-    let data_packet = parse_packet(number_of_bytes, buffer);
+    let data_packet = parser::parse_packet(number_of_bytes, buffer);
     // print packet headers
     match data_packet {
         Result::Ok(packet) => {
@@ -220,19 +155,19 @@ fn print_debug_info(buffer: &Vec<u8>, env: &mut JNIEnv, number_of_bytes: usize) 
                 )
                 .to_string();
 
-                print_on_screen(&message, env);
+                print_on_screen(message, env);
                 sleep(Duration::from_secs(2));
 
                 // Printing Ip slices
                 match etherparse::IpSlice::from_slice(&buffer[..number_of_bytes]) {
                     Result::Ok(value) => {
                         let message = format!("Ip slice is: {:?}, waiting 2 seconds", value);
-                        print_on_screen(&message, env);
+                        print_on_screen(message, env);
                         sleep(Duration::from_secs(2));
                     }
                     Result::Err(error) => {
                         let message = format!("Error {:?}", error);
-                        print_on_screen(&message, env);
+                        print_on_screen(message, env);
                         sleep(Duration::from_secs(2));
                     }
                 };
@@ -243,7 +178,7 @@ fn print_debug_info(buffer: &Vec<u8>, env: &mut JNIEnv, number_of_bytes: usize) 
                 match etherparse::UdpSlice::from_slice(&buffer[..number_of_bytes]) {
                     Result::Ok(value) => {
                         let message = format!("Udp slice: {:?}", value);
-                        print_on_screen(&message, env);
+                        print_on_screen(message, env);
                         sleep(Duration::from_secs(2));
                     }
                     Result::Err(error) => {
@@ -251,7 +186,7 @@ fn print_debug_info(buffer: &Vec<u8>, env: &mut JNIEnv, number_of_bytes: usize) 
                             "Unable to parse udp slice (even though it's supposed to be udp?) {:?}",
                             error
                         );
-                        print_on_screen(&message, env);
+                        print_on_screen(message, env);
                         sleep(Duration::from_secs(2));
                     }
                 }
@@ -261,7 +196,7 @@ fn print_debug_info(buffer: &Vec<u8>, env: &mut JNIEnv, number_of_bytes: usize) 
                 match etherparse::TcpSlice::from_slice(&buffer[..number_of_bytes]) {
                     Result::Ok(value) => {
                         let message = format!("TCP slice {:?}", value);
-                        print_on_screen(&message, env);
+                        print_on_screen(message, env);
                         sleep(Duration::from_secs(2));
                     }
                     Result::Err(error) => {
@@ -270,7 +205,7 @@ fn print_debug_info(buffer: &Vec<u8>, env: &mut JNIEnv, number_of_bytes: usize) 
                             error
                         );
 
-                        print_on_screen(&message, env);
+                        print_on_screen(message, env);
                         sleep(Duration::from_secs(2));
                     }
                 }
